@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>Performance Monitor Dashboard</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; color: #333; background-color: #f8f9fa; }
+    .dashboard-container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 25px; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    
+    .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+    .controls input[type="text"] { padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; width: 300px; font-size: 14px; }
+    .controls button { padding: 8px 16px; background-color: #24292e; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .controls button:hover { background-color: #0366d6; }
+    .controls a.btn-clear { padding: 7px 16px; text-decoration: none; color: #333; border: 1px solid #ccc; border-radius: 4px; background-color: #f8f9fa; font-size: 14px; }
+    .controls a.btn-clear:hover { background-color: #e2e6ea; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; }
+    th { background-color: #f1f3f5; font-weight: bold; }
+    th a { color: #333; text-decoration: none; display: block; }
+    th a:hover { text-decoration: underline; }
+    
+    tr:nth-child(even) { background-color: #fafafa; }
+    tr:hover { background-color: #f1f3f5; }
+    
+    .warning { color: #d32f2f; font-weight: bold; background-color: #ffebee !important; }
+    .caution { color: #e65100; font-weight: bold; background-color: #fff8e1 !important; }
+    .sub-text { font-size: 12px; font-weight: normal; color: #b71c1c; display: block; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="dashboard-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
+      <h1 style="margin: 0; font-size: 24px;">Performance Monitor Dashboard</h1>
+      <span style="color: #666; font-size: 14px;">表示件数: <%= @records.size %> 件</span>
+    </div>
+
+    <form action="<%= @mount_path %>" method="GET" class="controls">
+      <input type="text" name="q" value="<%= @params['q'] %>" placeholder="ControllerやPathで絞り込み...">
+      <input type="hidden" name="sort" value="<%= @params['sort'] %>">
+      <input type="hidden" name="direction" value="<%= @params['direction'] %>">
+      <button type="submit">絞り込み</button>
+      <a href="<%= @mount_path %>" class="btn-clear">クリア</a>
+    </form>
+
+    <% 
+      build_sort_url = ->(column) do
+        q = @params["q"]
+        next_dir = (@params["sort"] == column && @params["direction"] == "desc") ? "asc" : "desc"
+        "#{@mount_path}?sort=#{column}&direction=#{next_dir}&q=#{q}"
+      end
+    %>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Controller#Action</th>
+          <th>Method / Path</th>
+          <th>Status</th>
+          <th><a href="<%= build_sort_url.call('time') %>">全体処理時間 (ms) ↕</a></th>
+          <th><a href="<%= build_sort_url.call('sql_count') %>">SQL発行回数 ↕</a></th>
+          <th><a href="<%= build_sort_url.call('n_plus_one') %>">N+1 クエリ数 ↕</a></th>
+          <th><a href="<%= build_sort_url.call('sql_time') %>">SQL合計時間 (ms) ↕</a></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @records.each do |record| %>
+          <tr>
+            <td><%= record.controller_action %></td>
+            <td><%= record.method_path %></td>
+            <td><%= record.status %></td>
+            <td class="<%= record.slow? ? 'warning' : '' %>"><%= record.total_time_ms %></td>
+            <td class="<%= record.high_query_count? ? 'caution' : '' %>"><%= record.sql_count %></td>
+            <td class="<%= record.n_plus_one? ? 'warning' : '' %>">
+              <% if record.n_plus_one? %>
+                ⚠️ <%= record.n_plus_one_count %> 個
+                <span class="sub-text">
+                  (発行回数: <%= record.n_plus_one_queries.map { |q| "#{q.count}回" }.join(", ") %>)
+                </span>
+              <% else %>
+                <span style="color: #999;">0</span>
+              <% end %>
+            </td>
+            <td><%= record.total_sql_duration_ms %></td>
+          </tr>
+        <% end %>
+        
+        <% if @records.size == 0 %>
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 30px; color: #666;">
+              該当するレコードがありません
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
