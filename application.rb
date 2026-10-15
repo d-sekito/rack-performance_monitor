@@ -2,7 +2,7 @@ require_relative "thread_buffer"
 require_relative "storage"
 require_relative "measurement"
 require_relative "dashboard"
-require_relative "request_record"
+require_relative "request"
 
 module PerformanceMonitor
   class Application

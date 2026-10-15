@@ -1,9 +1,15 @@
 module PerformanceMonitor
-  class RequestRecord
+  class Request
     NPlusOneQuery = Data.define(:sql, :count)
 
     IGNORED_SQL_NAMES = ["SCHEMA", "TRANSACTION"].freeze
     IGNORED_SQL_PREFIXES = /\A\s*(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|PRAGMA)\b/i.freeze
+
+    DEFAULT_THRESHOLDS = {
+      time: 300,          # スローリクエストとみなすミリ秒
+      sql_count: 20,      # クエリ過多とみなす発行回数
+      n_plus_one: 5       # N+1とみなす同一クエリの発行回数
+    }.freeze
 
     def initialize(data, thresholds: {})
       @data = data
@@ -33,6 +39,11 @@ module PerformanceMonitor
 
     def total_sql_duration_ms
       @data[:total_sql_duration_ms]
+    end
+
+    def match?(query)
+      q = query.downcase
+      controller_action.downcase.include?(q) || method_path.downcase.include?(q)
     end
 
     def slow?

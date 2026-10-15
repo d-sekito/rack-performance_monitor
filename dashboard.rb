@@ -1,39 +1,55 @@
+require "rack"
 require "erb"
-require_relative "request_record"
-require_relative "request_records"
+require_relative "request"
 
 module PerformanceMonitor
   class Dashboard
-    def initialize(storage, mount_path:, thresholds:)
+    ALLOWED_SORT_KEYS = %w[total_time_ms sql_count n_plus_one_count total_sql_duration_ms].freeze
+
+    def initialize(storage, mount_path: nil, thresholds: {})
       @storage = storage
       @mount_path = mount_path
       @thresholds = thresholds
-      @template_path = File.expand_path("views/index.html.erb", __dir__)
     end
 
     def call(env)
       req = Rack::Request.new(env)
-      
-      raw_array = @storage.read_all.map do |data|
-        RequestRecord.new(data, thresholds: @thresholds)
-      end
-
-      @records = RequestRecords.new(raw_array)
-                   .filter_by(req.params["q"])
-                   .sort_by_key(req.params["sort"], req.params["direction"])
-
-      @params = req.params
-      template_content = File.read(@template_path)
-      body = ERB.new(template_content).result(binding)
+      params = req.params
+      query = params["q"]
+      records = prepare_records(params)
 
       [
         200,
-        {
-          "content-type" => "text/html; charset=utf-8",
-          "content-length" => body.bytesize.to_s
-        },
-        [body]
+        { "Content-Type" => "text/html; charset=utf-8" },
+        [render_html(mount_path: @mount_path, params: params, query: query, records: records)]
       ]
+    end
+
+    private
+
+    def prepare_records(params)
+      all_requests = @storage.read_all.map { |data| Request.new(data, thresholds: @thresholds) }
+      filtered_requests = filter_requests(all_requests, params["q"])
+      sort_requests(filtered_requests, params["sort"], params["direction"])
+    end
+
+    def filter_requests(requests, query)
+      return requests if query.nil? || query.strip.empty?
+
+      requests.select { |r| r.match?(query) }
+    end
+
+    def sort_requests(requests, sort_key, direction)
+      return requests unless ALLOWED_SORT_KEYS.include?(sort_key)
+
+      sorted = requests.sort_by(&sort_key.to_sym)
+      direction == "asc" ? sorted : sorted.reverse
+    end
+
+    def render_html(**locals)
+      template_path = File.expand_path("views/index.html.erb", __dir__)
+      template = ERB.new(File.read(template_path))
+      template.result_with_hash(locals)
     end
   end
 end
