@@ -13,13 +13,48 @@
     .controls a.btn-clear { padding: 7px 16px; text-decoration: none; color: #333; border: 1px solid #ccc; border-radius: 4px; background-color: #f8f9fa; font-size: 14px; }
     .controls a.btn-clear:hover { background-color: #e2e6ea; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; }
+    th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; vertical-align: top; }
     th { background-color: #f1f3f5; font-weight: bold; }
     th a { color: #333; text-decoration: none; display: block; }
     th a:hover { text-decoration: underline; }
     tr:nth-child(even) { background-color: #fafafa; }
     tr:hover { background-color: #f1f3f5; }
     .warning { color: #d32f2f; font-weight: bold; background-color: #ffebee !important; }
+    
+    /* SQL詳細表示用のスタイル修正 */
+    .query-details { font-size: 12px; }
+    .query-details summary { cursor: pointer; color: #0366d6; outline: none; font-weight: bold; margin-bottom: 4px; }
+    .query-details summary:hover { text-decoration: underline; }
+    .query-list { 
+      max-height: 250px; 
+      overflow-y: auto; 
+      background-color: #24292e; 
+      color: #e1e4e8; 
+      padding: 10px; 
+      margin-top: 6px; 
+      border-radius: 4px; 
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; 
+      word-break: break-all; 
+    }
+    .query-item { 
+      display: block; 
+      margin-bottom: 6px; 
+      padding-bottom: 6px; 
+      border-bottom: 1px solid #444d56; 
+      line-height: 1.4; 
+    }
+    .query-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .query-time { color: #85e89d; font-weight: bold; margin-right: 8px; display: inline-block; min-width: 60px; }
+    .n-plus-one-warning { 
+      background-color: #ffebee; 
+      color: #d32f2f; 
+      padding: 8px; 
+      border-radius: 4px; 
+      margin-top: 6px; 
+      margin-bottom: 6px;
+      border: 1px solid #f5c6cb; 
+    }
+    .n-plus-one-item { margin-top: 4px; font-family: monospace; font-size: 11px; color: #b71c1c; }
   </style>
 </head>
 <body>
@@ -56,6 +91,7 @@
           <th><a href="<%= build_sort_url.call('total_time_ms') %>">全体処理時間 (ms) ↕</a></th>
           <th><a href="<%= build_sort_url.call('sql_count') %>">SQL発行回数 ↕</a></th>
           <th><a href="<%= build_sort_url.call('total_sql_duration_ms') %>">SQL合計時間 (ms) ↕</a></th>
+          <th>SQL詳細</th>
         </tr>
       </thead>
       <tbody>
@@ -67,12 +103,44 @@
             <td class="<%= record.slow? ? 'warning' : '' %>"><%= record.total_time_ms %></td>
             <td class="<%= record.n_plus_one? ? 'warning' : '' %>"><%= record.sql_count %></td>
             <td><%= record.total_sql_duration_ms %></td>
+            <td>
+              <% if record.query_details.any? %>
+                <details class="query-details">
+                  <summary>クエリ一覧を表示 (<%= record.query_details.size %>件)</summary>
+                  
+                  <% if record.n_plus_one? %>
+                    <div class="n-plus-one-warning">
+                      <strong>⚠️ N+1 検知 (<%= record.n_plus_one_count %>種類)</strong>
+                      <% record.n_plus_one_queries.each do |nq| %>
+                        <div class="n-plus-one-item">
+                          [<%= nq.count %>回発行] <%= nq.sql.to_s[0..80] %><%= nq.sql.to_s.length > 80 ? '...' : '' %>
+                        </div>
+                      <% end %>
+                    </div>
+                  <% end %>
+
+                  <div class="query-list">
+                    <% record.query_details.each do |event| %>
+                      <div class="query-item">
+                        <span class="query-time">[<%= event[:duration_ms] || event[:duration] || 0 %>ms]</span><%= event[:sql] %>
+                      </div>
+                    <% end %>
+                  </div>
+                </details>
+              <% else %>
+                <span style="color: #999; font-size: 12px;">記録なし</span>
+              <% end %>
+            </td>
           </tr>
+        <% end %>
+        
+        <% records.each do |record| %>
+          <!-- 念のため records.size == 0 の判定 -->
         <% end %>
         
         <% if records.size == 0 %>
           <tr>
-            <td colspan="6" style="text-align: center; padding: 30px; color: #666;">
+            <td colspan="7" style="text-align: center; padding: 30px; color: #666;">
               該当するレコードがありません
             </td>
           </tr>

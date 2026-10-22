@@ -47,11 +47,11 @@ module PerformanceMonitor
     end
 
     def slow?
-      total_time_ms.to_f > (@thresholds[:time] || 300)
+      total_time_ms.to_f > (@thresholds[:time] || DEFAULT_THRESHOLDS[:time])
     end
 
     def high_query_count?
-      sql_count.to_i > (@thresholds[:sql_count] || 20)
+      sql_count.to_i > (@thresholds[:sql_count] || DEFAULT_THRESHOLDS[:sql_count])
     end
 
     def n_plus_one?
@@ -63,6 +63,11 @@ module PerformanceMonitor
       n_plus_one_queries.count
     end
 
+    # 除外対象以外のクエリエベントのリストを返す
+    def query_details
+      @query_details ||= @data[:sql_events]&.reject { |event| ignorable_sql?(event) } || []
+    end
+
     # 検知されたすべてのN+1クエリ
     def n_plus_one_queries
       @n_plus_one_queries ||= begin
@@ -70,15 +75,13 @@ module PerformanceMonitor
         counts = Hash.new(0)
 
         events.each do |event|
-          sql = event[:sql]
-          next if sql.nil? || IGNORED_SQL_NAMES.include?(event[:name])
-          next if sql.match?(IGNORED_SQL_PREFIXES)
+          next if ignorable_sql?(event)
 
-          normalized = normalize_sql(sql)
+          normalized = normalize_sql(event[:sql])
           counts[normalized] += 1 unless normalized.empty?
         end
 
-        threshold = @thresholds[:n_plus_one] || 5
+        threshold = @thresholds[:n_plus_one] || DEFAULT_THRESHOLDS[:n_plus_one]
 
         counts
           .select { |_, count| count >= threshold }
@@ -88,6 +91,14 @@ module PerformanceMonitor
     end
 
     private
+
+    def ignorable_sql?(event)
+      sql = event[:sql]
+      return true if sql.nil?
+      return true if IGNORED_SQL_NAMES.include?(event[:name])
+      return true if sql.match?(IGNORED_SQL_PREFIXES)
+      false
+    end
 
     def normalize_sql(sql)
       s = sql.dup
